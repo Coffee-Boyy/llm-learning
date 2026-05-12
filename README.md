@@ -65,10 +65,29 @@ cmake -S . -B build -DDISSECTED_LLM_CUDA=ON
 cmake --build build -j
 ```
 
+Optional preset (same flags, writes to `build/linux-release/`):
+
+```bash
+cmake --preset linux-release
+cmake --build --preset linux-release
+```
+
 Inspect the GGUF container:
 
 ```bash
 ./build/dissected-gguf-inspect models/qwen3-8b-gguf/Qwen3-8B-Q4_K_M.gguf
+```
+
+Run a one-shot completion via llama.cpp (prompt flag or stdin). Environment
+variables `DISSECTED_LLM_MODEL` and `DISSECTED_LLM_LLAMA_CLI` override `--model`
+and `--llama-cli` when set:
+
+```bash
+export DISSECTED_LLM_MODEL="$(pwd)/models/qwen3-8b-gguf/Qwen3-8B-Q4_K_M.gguf"
+export DISSECTED_LLM_LLAMA_CLI="$(pwd)/external/llama.cpp/build/bin/llama-cli"
+
+./build/dissected-llm-complete -p "Summarize KV cache in one sentence /no_think"
+./build/dissected-llm-complete --stream -p "Say hello /no_think"
 ```
 
 Run the Responses API server. If `--llama-cli` is provided, requests are sent to
@@ -100,6 +119,14 @@ curl -N http://localhost:8000/v1/responses \
   -d '{"model":"qwen3-8b-q4_k_m","input":"What is prefill? /no_think","stream":true}'
 ```
 
+Benchmark streaming throughput (JSON metrics on stdout with `--json-log`):
+
+```bash
+./build/dissected-llm-bench --iterations 2 --json-log \
+  models/qwen3-8b-gguf/Qwen3-8B-Q4_K_M.gguf \
+  external/llama.cpp/build/bin/llama-cli
+```
+
 ## OpenAI Responses API scope
 
 Implemented first:
@@ -107,7 +134,7 @@ Implemented first:
 - `POST /v1/responses`
 - Text `input` and optional `instructions`
 - `temperature`, `top_p`, `max_output_tokens`, `stream`
-- Responses-style JSON object and SSE text deltas
+- Responses-style JSON object and SSE text deltas (live chunks when llama.cpp is configured)
 
 Explicitly unsupported for now:
 

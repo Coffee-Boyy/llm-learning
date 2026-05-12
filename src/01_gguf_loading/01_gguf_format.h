@@ -88,5 +88,6 @@ Result<GgufFile> LoadGgufMetadata(const std::string& path);
 std::string MetadataTypeName(MetadataType type);
 std::string TensorTypeName(TensorType type);
 std::string MetadataValueToString(const MetadataValue& value);
+std::string ArchitectureHint(const GgufFile& file);
 
 }  // namespace dissected::gguf

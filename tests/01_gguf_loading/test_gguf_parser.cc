@@ -4,6 +4,7 @@
 #include <string>
 
 #include "01_gguf_loading/01_gguf_format.h"
+#include "01_gguf_loading/01_tensor_index.h"
 
 namespace {
 
@@ -42,9 +43,14 @@ int main() {
   assert(loaded.ok());
   assert(loaded.value().version == 3);
   assert(loaded.value().tensor_count == 1);
+  assert(dissected::gguf::ArchitectureHint(loaded.value()) == "qwen3");
   assert(loaded.value().metadata.at("general.architecture").type == dissected::gguf::MetadataType::String);
   assert(loaded.value().tensors[0].name == "blk.0.attn_q.weight");
   assert(dissected::gguf::TensorTypeName(loaded.value().tensors[0].type) == "Q4_K");
+  dissected::gguf::TensorIndex index(loaded.value().tensors);
+  assert(index.Find("blk.0.attn_q.weight") != nullptr);
+  assert(index.CountByType().at("Q4_K") == 1);
+  assert(dissected::gguf::TensorShapeString(loaded.value().tensors[0]) == "[128 x 256]");
   std::remove(path.c_str());
   return 0;
 }

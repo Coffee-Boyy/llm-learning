@@ -3,11 +3,14 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <string>
+#include <string_view>
 
 #include "03_tokenization_template/03_qwen3_template.h"
+#include "00_common/strings.h"
 #include "05_transformer_runtime/05_session.h"
 #include "06_sampling_decode/06_sampler.h"
 #include "07_responses_api/07_error_shapes.h"
@@ -28,6 +31,12 @@ struct Args {
 
 Args ParseArgs(int argc, char** argv) {
   Args args;
+  if (const char* env_model = std::getenv("DISSECTED_LLM_MODEL")) {
+    args.model_path = env_model;
+  }
+  if (const char* env_cli = std::getenv("DISSECTED_LLM_LLAMA_CLI")) {
+    args.llama_cli = env_cli;
+  }
   for (int i = 1; i < argc; ++i) {
     std::string key = argv[i];
     auto next = [&]() -> std::string { return i + 1 < argc ? argv[++i] : ""; };
@@ -58,6 +67,17 @@ std::string BodyFromRequest(const std::string& request) {
 
 bool IsResponsesPost(const std::string& request) {
   return request.rfind("POST /v1/responses ", 0) == 0 || request.rfind("POST /responses ", 0) == 0;
+}
+
+bool WriteAll(int fd, std::string_view data) {
+  while (!data.empty()) {
+    ssize_t n = write(fd, data.data(), data.size());
+    if (n <= 0) {
+      return false;
+    }
+    data.remove_prefix(static_cast<std::size_t>(n));
+  }
+  return true;
 }
 
 }  // namespace
@@ -122,16 +142,55 @@ int main(int argc, char** argv) {
           if (req.temperature >= 0) sampling.temperature = req.temperature;
           if (req.top_p >= 0) sampling.top_p = req.top_p;
           sampling.max_output_tokens = req.max_output_tokens;
-          auto generated = session.Generate({req.input, req.instructions, sampling});
-          if (!generated.ok()) {
-            response = HttpResponse(400, "application/json",
-                                    dissected::api::ErrorJson("generation_error", generated.status().message()));
-          } else if (req.stream) {
-            response = HttpResponse(200, "text/event-stream",
-                                    dissected::api::BuildSseResponse(req.model.empty() ? args.model_name : req.model,
-                                                                     generated.value().text));
+          dissected::runtime::GenerationRequest gen_req{req.input, req.instructions, sampling};
+          const std::string model_id = req.model.empty() ? args.model_name : req.model;
+          if (req.stream) {
+            auto ready = session.ValidateBackend();
+            if (!ready.ok()) {
+              response = HttpResponse(400, "application/json",
+                                        dissected::api::ErrorJson("generation_error", ready.message()));
+            } else {
+              std::string header =
+                  "HTTP/1.1 200 OK\r\n"
+                  "Content-Type: text/event-stream\r\n"
+                  "Cache-Control: no-cache\r\n"
+                  "Access-Control-Allow-Origin: *\r\n"
+                  "Connection: close\r\n"
+                  "\r\n";
+              if (!WriteAll(client, header)) {
+                close(client);
+                continue;
+              }
+              auto streamed = session.GenerateStreaming(gen_req, [&](std::string_view chunk) {
+                if (chunk.empty()) {
+                  return;
+                }
+                std::string block =
+                    dissected::api::FormatSseTextDelta(model_id, std::string(chunk));
+                WriteAll(client, block);
+              });
+              if (!streamed.ok()) {
+                std::string err_line =
+                    "event: error\n"
+                    "data: {\"error\":\"" +
+                    dissected::JsonEscape(streamed.status().message()) + "\"}\n\n";
+                WriteAll(client, err_line);
+              } else {
+                WriteAll(client, dissected::api::FormatSseCompleted());
+                WriteAll(client, dissected::api::FormatSseDone());
+              }
+              close(client);
+              continue;
+            }
           } else {
-            response = HttpResponse(200, "application/json", dissected::api::ResponseJson(req, generated.value()));
+            auto generated = session.Generate(gen_req);
+            if (!generated.ok()) {
+              response = HttpResponse(400, "application/json",
+                                      dissected::api::ErrorJson("generation_error", generated.status().message()));
+            } else {
+              response = HttpResponse(200, "application/json",
+                                        dissected::api::ResponseJson(req, generated.value()));
+            }
           }
         }
       }

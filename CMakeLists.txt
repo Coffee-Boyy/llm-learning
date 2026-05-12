@@ -63,6 +63,11 @@ add_executable(dissected-llm-bench
 )
 target_link_libraries(dissected-llm-bench PRIVATE dissected_llm_core)
 
+add_executable(dissected-llm-complete
+  src/05_transformer_runtime/05_complete_main.cc
+)
+target_link_libraries(dissected-llm-complete PRIVATE dissected_llm_core)
+
 if(DISSECTED_LLM_BUILD_TESTS)
   enable_testing()
 

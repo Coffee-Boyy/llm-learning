@@ -22,6 +22,8 @@ int main(int argc, char** argv) {
   std::cout << "Tensors: " << file.tensor_count << "\n";
   std::cout << "Tensor data starts at byte: " << file.tensor_data_start << "\n\n";
 
+  std::cout << "Architecture hint: " << dissected::gguf::ArchitectureHint(file) << "\n";
+
   std::cout << "Selected metadata:\n";
   for (const auto& key : {"general.architecture", "general.name", "tokenizer.chat_template",
                           "qwen3.context_length", "llama.context_length"}) {

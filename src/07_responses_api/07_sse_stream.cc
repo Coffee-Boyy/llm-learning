@@ -16,16 +16,30 @@ std::vector<std::string> SplitForSse(const std::string& text) {
   return chunks;
 }
 
+std::string FormatSseTextDelta(const std::string& model, const std::string& delta) {
+  std::ostringstream out;
+  out << "event: response.output_text.delta\n";
+  out << "data: {\"type\":\"response.output_text.delta\",\"model\":\"" << JsonEscape(model)
+      << "\",\"delta\":\"" << JsonEscape(delta) << "\"}\n\n";
+  return out.str();
+}
+
+std::string FormatSseCompleted() {
+  return "event: response.completed\n"
+         "data: {\"type\":\"response.completed\"}\n\n";
+}
+
+std::string FormatSseDone() {
+  return "data: [DONE]\n\n";
+}
+
 std::string BuildSseResponse(const std::string& model, const std::string& text) {
   std::ostringstream out;
   for (const auto& chunk : SplitForSse(text)) {
-    out << "event: response.output_text.delta\n";
-    out << "data: {\"type\":\"response.output_text.delta\",\"model\":\"" << JsonEscape(model)
-        << "\",\"delta\":\"" << JsonEscape(chunk) << "\"}\n\n";
+    out << FormatSseTextDelta(model, chunk);
   }
-  out << "event: response.completed\n";
-  out << "data: {\"type\":\"response.completed\"}\n\n";
-  out << "data: [DONE]\n\n";
+  out << FormatSseCompleted();
+  out << FormatSseDone();
   return out.str();
 }
 

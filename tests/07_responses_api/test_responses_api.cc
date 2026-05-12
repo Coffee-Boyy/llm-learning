@@ -22,5 +22,8 @@ int main() {
   auto sse = dissected::api::BuildSseResponse("model", "hello");
   assert(sse.find("response.output_text.delta") != std::string::npos);
   assert(sse.find("[DONE]") != std::string::npos);
+
+  auto delta = dissected::api::FormatSseTextDelta("m", "a\"b");
+  assert(delta.find("\\\"") != std::string::npos);
   return 0;
 }

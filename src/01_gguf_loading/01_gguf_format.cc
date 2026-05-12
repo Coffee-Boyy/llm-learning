@@ -3,6 +3,7 @@
 #include <cstring>
 #include <fstream>
 #include <sstream>
+#include <variant>
 
 namespace dissected::gguf {
 namespace {
@@ -252,6 +253,21 @@ std::string MetadataValueToString(const MetadataValue& value) {
     }
   }, value.value);
   return out.str();
+}
+
+std::string ArchitectureHint(const GgufFile& file) {
+  auto it = file.metadata.find("general.architecture");
+  if (it != file.metadata.end() && it->second.type == MetadataType::String) {
+    if (const auto* name = std::get_if<std::string>(&it->second.value)) {
+      return *name;
+    }
+  }
+  for (const auto& tensor : file.tensors) {
+    if (tensor.name.find("blk.") == 0) {
+      return "transformer-block (no general.architecture string)";
+    }
+  }
+  return "unknown";
 }
 
 }  // namespace dissected::gguf
