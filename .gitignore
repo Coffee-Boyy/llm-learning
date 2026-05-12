@@ -1,0 +1,7 @@
+build/
+build-*/
+models/
+*.gguf
+*.log
+compile_commands.json
+.cache/
